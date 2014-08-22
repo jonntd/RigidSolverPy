@@ -1,0 +1,57 @@
+
+    def init_transformation_matrix(self):
+        U = self.V[0] # N_*3    rest pose
+
+        for f_ in  range(1,self.F_):
+            X = self.V[f_]
+            for p_, patch in self.P.items():
+
+                avg_u = (U[patch,:]).mean(0)
+                avg_x =  (X[patch,:]).mean(0)
+
+                sigma_ux = np.zeros((3,3))
+                for v_ in patch:
+                    sigma_ux += np.outer( U[v_,:],  X[v_])
+                n_vtx = len(patch)
+                sigma_ux = sigma_ux/n_vtx - np.outer(avg_u, avg_x)
+
+                A = sigma_ux - sigma_ux.T
+
+                Q = np.zeros((4,4))
+                Q[0,0] = sigma_ux.trace()
+                Q[0,1:] =  [ A[1,2], A[2,0], A[0,1] ]
+                Q[1:,0] =  [ A[1,2], A[2,0], A[0,1] ]
+                Q[1:,1:] = sigma_ux + sigma_ux.T - sigma_ux.trace()* np.identity(3)
+
+                eigenvals, eigenvecs = eig(Q)
+                q = eigenvecs[:,np.argsort(eigenvals)[-1]]
+
+                self.R[f_, p_, :, :] = [ [ q[0]**2 + q[1]**2 - q[2]**2 - q[3]**2,      2*(q[1]*q[2]-q[0]*q[3]),                               2*(q[1]*q[3] + q[0]*q[2]) ], \
+                                         [ 2*(q[1]*q[2] + q[0]*q[3]),                            q[0]**2 + q[2]**2 - q[1]**2 - q[3]**2,      2*(q[2]*q[3] - q[0]*q[1]) ], \
+                                         [ 2*(q[1]*q[3] - q[0]*q[2]),                             2*(q[2]*q[3] + q[0]*q[1]),                             q[0]**2 + q[3]**2 - q[1]**2 - q[2]**2] ]
+                self.T[f_, p_, :] = avg_x - np.dot(self.R[f_, p_,:,:] ,  avg_u)
+
+
+        def read_patch_file(self, input_patch_file):
+        self.P = dict()
+        vtx_idx = 0
+        with open(input_patch_file,'r') as f:
+            for line in f.readlines()[1:]:
+                for token in line.split():
+                    patch_label = int(token)
+                    if patch_label not in self.P:
+                        self.P[patch_label] = []
+                    self.P[patch_label].append(vtx_idx)
+                    vtx_idx += 1
+        self.P_ = len(self.P)
+
+            def read_bones_file(self, input_bones_file):
+        self.B = dict()
+        with open(input_bones_file, 'r') as f:
+            for line in f.readlines():
+                label = int( line.split()[0] )
+                for child_label in line.split()[1:]:
+                    child_label = int(child_label)
+                    if label not in self.B:
+                        self.B[label] = set()
+                    self.B[label].add(child_label)
